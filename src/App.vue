@@ -82,8 +82,8 @@ const targetUserID = 'woshuolesuan'; // 对方的固定ID
 
 // ⚠️ 重要：替换为两个用户的真实 UserSig（从腾讯云控制台获取）
 const userSigMap = {
-  gongjuren: 'eJwtzMEKgkAUheF3mXXInRnvGEKLoqUkpFAtLUe5DY2TWorRu2fq8nwH-g9Lo8R765qFTHjAVtOmXNuWCpq4rGx5f9XaLmeTm8w5ylnIFQCXEqU-P7p3VOvREVEAwKwtPf4WBD6iH0ixVKgc25eqS7vYDH22PZnz2ornXh3iBpNrdTsqs*OFiFw3cEWwYd8fV3gzew__',      // 替换为工具人的 UserSig
-  woshuolesuan: 'eJwtzEELgjAYxvHvsmsh73TTELpIdBDJILt0kzb1banDuRZE3z1Tj8-vgf*HFNnFe8mBxMT3gGznjUJ2I1Y4s*tNY-unNLbs1t8IVWqNgsQ0BKBBwAO2PPKtcZCTc859AFh0xPZvUcQ4ZxHQtYL1lL861*x6Qw-ZPTmrvMnTvGUq4eGxUsVGnworklvqwD7cnnx-I7Y0yw__'  // 替换为我说了算的 UserSig
+  gongjuren: 'eJwtzE0LgkAUheH-MttCr47XIcFNZREIBWYkuAkc7U5ofhNF-z1Tl*c58H7Y2Q*0XtbMYaYGbDluSmTRUkojZ88iU10ti-lsksetLClhjmEDGJwjt6ZHvkqq5eCIaALApC3lfxPCQrQRVnOFsqG9D7E59ekV1iFfdEfxVrGe*yKozO1mF1w8dagidfdkF*tp5LLvD5lhM4M_',      // 替换为工具人的 UserSig
+  woshuolesuan: 'eJwtzLEOgjAUheF36Yoht9CCIXEhuiCyQBTHJi14AQEpCInx3UVgPN*fnA9Jwth8q454xDKB7JaNUtU9Zrjw2OjH0FRKD6LeupalaFuUxKMOALVtbrO1qKnFTs3OObcAYNUen39zXca5w*imGvP5HuR4xfslOAapmKKmSHwwqqyiYczKfZEYJzGk8Iqi8y0-kO8PGjg0QA__'  // 替换为我说了算的 UserSig
 };
 
 let currentUserID = '';
