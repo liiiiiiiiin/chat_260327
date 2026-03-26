@@ -220,22 +220,37 @@ const reportMessageRead = (messageList) => {
   }
 };
 
+// 修改 loginIM 函数
 const loginIM = async () => {
-  // 如果已有实例，先登出并销毁
   if (chat) {
     await chat.logout();
     chat = null;
   }
   chat = TencentCloudChat.create({ SDKAppID });
   chat.setLogLevel(0);
+  // 登录
   await chat.login({ userID: currentUserID, userSig: currentUserSig });
+  
+  // 等待 SDK 就绪
+  await new Promise((resolve) => {
+    if (chat.isReady()) {
+      resolve();
+    } else {
+      chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
+    }
+  });
+  
+  // 现在可以安全调用 getMessageList
   const conversationID = `C2C${targetUserID}`;
   const res = await chat.getMessageList({ conversationID, count: 20 });
   messages.value = res.data.messageList.reverse();
   reportMessageRead(messages.value);
+  
+  // 注册事件监听
   chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, onMessageReceived);
   chat.on(TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT, onMessageReadReceipt);
 };
+
 
 const selectRole = async (role) => {
   if (loadingRole.value) return;
