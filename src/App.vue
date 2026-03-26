@@ -19,8 +19,9 @@
   <div v-else-if="!isLoggedIn" class="role-container">
     <div class="role-box">
       <h2>选择你的身份</h2>
-      <button @click="selectRole('gongjuren')">工具人</button>
-      <button @click="selectRole('woshuolesuan')">我说了算</button>
+      <button @click="selectRole('gongjuren')" :disabled="loadingRole">工具人</button>
+      <button @click="selectRole('woshuolesuan')" :disabled="loadingRole">我说了算</button>
+      <p v-if="roleError" class="error">{{ roleError }}</p>
     </div>
   </div>
 
@@ -79,10 +80,10 @@ const SDKAppID = 1600133534;               // 你的 SDKAppID
 const targetUserID = 'woshuolesuan'; // 对方的固定ID
 // =============================================
 
-// 替换为两个用户的真实 UserSig（从控制台获取）
+// ⚠️ 重要：替换为两个用户的真实 UserSig（从腾讯云控制台获取）
 const userSigMap = {
-  gongjuren: 'eJwtzMEKgkAUheF3mXXInRnvGEKLoqUkpFAtLUe5DY2TWorRu2fq8nwH-g9Lo8R765qFTHjAVtOmXNuWCpq4rGx5f9XaLmeTm8w5ylnIFQCXEqU-P7p3VOvREVEAwKwtPf4WBD6iH0ixVKgc25eqS7vYDH22PZnz2ornXh3iBpNrdTsqs*OFiFw3cEWwYd8fV3gzew__',
-  woshuolesuan: 'eJwtzEELgjAYxvHvsmsh73TTELpIdBDJILt0kzb1banDuRZE3z1Tj8-vgf*HFNnFe8mBxMT3gGznjUJ2I1Y4s*tNY-unNLbs1t8IVWqNgsQ0BKBBwAO2PPKtcZCTc859AFh0xPZvUcQ4ZxHQtYL1lL861*x6Qw-ZPTmrvMnTvGUq4eGxUsVGnworklvqwD7cnnx-I7Y0yw__'
+  gongjuren: 'eJwtzMEKgkAUheF3mXXInRnvGEKLoqUkpFAtLUe5DY2TWorRu2fq8nwH-g9Lo8R765qFTHjAVtOmXNuWCpq4rGx5f9XaLmeTm8w5ylnIFQCXEqU-P7p3VOvREVEAwKwtPf4WBD6iH0ixVKgc25eqS7vYDH22PZnz2ornXh3iBpNrdTsqs*OFiFw3cEWwYd8fV3gzew__',      // 替换为工具人的 UserSig
+  woshuolesuan: 'eJwtzEELgjAYxvHvsmsh73TTELpIdBDJILt0kzb1banDuRZE3z1Tj8-vgf*HFNnFe8mBxMT3gGznjUJ2I1Y4s*tNY-unNLbs1t8IVWqNgsQ0BKBBwAO2PPKtcZCTc859AFh0xPZvUcQ4ZxHQtYL1lL861*x6Qw-ZPTmrvMnTvGUq4eGxUsVGnworklvqwD7cnnx-I7Y0yw__'  // 替换为我说了算的 UserSig
 };
 
 let currentUserID = '';
@@ -92,6 +93,9 @@ let oppositeNick = '';
 let chat = null;
 const showChat = ref(false);
 const isLoggedIn = ref(false);
+const loadingRole = ref(false);
+const roleError = ref('');
+
 const password = ref('');
 const errorMsg = ref('');
 const inputText = ref('');
@@ -217,6 +221,11 @@ const reportMessageRead = (messageList) => {
 };
 
 const loginIM = async () => {
+  // 如果已有实例，先登出并销毁
+  if (chat) {
+    await chat.logout();
+    chat = null;
+  }
   chat = TencentCloudChat.create({ SDKAppID });
   chat.setLogLevel(0);
   await chat.login({ userID: currentUserID, userSig: currentUserSig });
@@ -229,12 +238,31 @@ const loginIM = async () => {
 };
 
 const selectRole = async (role) => {
-  currentUserID = role;
-  currentUserSig = userSigMap[role];
-  oppositeNick = role === 'gongjuren' ? '我说了算' : '工具人';
-  await loginIM();
-  isLoggedIn.value = true;
-  resetTimer();
+  if (loadingRole.value) return;
+  loadingRole.value = true;
+  roleError.value = '';
+  try {
+    currentUserID = role;
+    currentUserSig = userSigMap[role];
+    // 简单检查 UserSig 是否被替换
+    if (currentUserSig.includes('你的工具人UserSig') || currentUserSig.includes('你的我说了算UserSig')) {
+      throw new Error('请先在代码中填写正确的 UserSig！');
+    }
+    oppositeNick = role === 'gongjuren' ? '我说了算' : '工具人';
+    await loginIM();
+    isLoggedIn.value = true;
+    resetTimer();
+  } catch (err) {
+    console.error('登录失败', err);
+    roleError.value = err.message || '登录失败，请检查 UserSig 是否正确';
+    // 清理可能残留的聊天实例
+    if (chat) {
+      await chat.logout().catch(() => {});
+      chat = null;
+    }
+  } finally {
+    loadingRole.value = false;
+  }
 };
 
 const checkPassword = () => {
@@ -341,7 +369,11 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
 }
-.role-box button:hover {
+.role-box button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.role-box button:hover:not(:disabled) {
   background: #5a5e64;
 }
 
