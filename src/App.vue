@@ -29,8 +29,8 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { Chat, MessageList, MessageInput } from '@tencentcloud/chat-uikit-vue';
-import '@tencentcloud/chat-uikit-vue/dist/style.css';
+import { Chat, MessageList, MessageInput } from './TUIKit';
+import './TUIKit/styles/index.css';
 
 // ========== ⚠️ 请替换为你的腾讯云IM配置 ==========
 const SDKAppID = 1600133534;               // 替换为你的 SDKAppID
