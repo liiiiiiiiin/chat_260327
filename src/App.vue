@@ -15,11 +15,20 @@
     </div>
   </div>
 
+  <!-- 身份选择界面 -->
+  <div v-else-if="!isLoggedIn" class="role-container">
+    <div class="role-box">
+      <h2>选择你的身份</h2>
+      <button @click="selectRole('gongjuren')">工具人</button>
+      <button @click="selectRole('woshuolesuan')">我说了算</button>
+    </div>
+  </div>
+
   <!-- 聊天界面 -->
   <div v-else class="chat-container" @mousemove="resetTimer" @click="resetTimer" @keydown="resetTimer">
     <div class="chat-header-custom">
       <span class="app-title">FJAD审图</span>
-      <span class="chat-with">我说了算</span>
+      <span class="chat-with">{{ oppositeNick }}</span>
     </div>
 
     <div class="message-list" ref="messageListRef">
@@ -39,17 +48,24 @@
     </div>
 
     <div class="input-area">
-      <input
-        type="text"
-        v-model="inputText"
-        placeholder="输入消息..."
-        @keyup.enter="sendTextMessage"
-      />
-      <label class="file-btn">
-        📎
-        <input type="file" accept="image/*" @change="sendImageMessage" style="display: none;" />
-      </label>
-      <button @click="sendTextMessage">发送</button>
+      <div class="emoji-panel" v-if="showEmoji">
+        <button v-for="emoji in emojiList" :key="emoji" @click="insertEmoji(emoji)">{{ emoji }}</button>
+      </div>
+      <div class="input-row">
+        <input
+          type="text"
+          v-model="inputText"
+          placeholder="输入消息..."
+          @keyup.enter="sendTextMessage"
+          ref="messageInput"
+        />
+        <button class="emoji-btn" @click="toggleEmojiPanel">😀</button>
+        <label class="file-btn">
+          📎
+          <input type="file" accept="image/*" @change="sendImageMessage" style="display: none;" />
+        </label>
+        <button @click="sendTextMessage">发送</button>
+      </div>
     </div>
   </div>
 </template>
@@ -59,25 +75,61 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import TencentCloudChat from '@tencentcloud/chat';
 
 // ========== 请替换为你的腾讯云 IM 配置 ==========
-const SDKAppID = 1600133534;               // 替换为你的 SDKAppID
-const myUserID = 'toolman';     
-const userSig = 'eJwtzDsPgjAYheH-0tlg6UVSEgeJkkAMi7i5NLaWT*USaNFg-O8iMJ7nJO8H5ceT1*sWhYh4GK2mDUpXFm4wsa3rZymr5erUQzYNKBT6G4x9Sjll86PfDbR6dM45wRjPaqH8WxAwJpgQZKmAGcvOuNRlXQvDZX1Psus*zXdysNTFsTaRiF59YY0YknNRHrbo*wMTYTPk';            // 替换为你的 UserSig
-const targetUserID = 'queen';
+const SDKAppID = 1600133534;               // 你的 SDKAppID
+const targetUserID = 'woshuolesuan'; // 对方的固定ID
 // =============================================
+
+// 替换为两个用户的真实 UserSig（从控制台获取）
+const userSigMap = {
+  gongjuren: 'eJwtzMEKgkAUheF3mXXInRnvGEKLoqUkpFAtLUe5DY2TWorRu2fq8nwH-g9Lo8R765qFTHjAVtOmXNuWCpq4rGx5f9XaLmeTm8w5ylnIFQCXEqU-P7p3VOvREVEAwKwtPf4WBD6iH0ixVKgc25eqS7vYDH22PZnz2ornXh3iBpNrdTsqs*OFiFw3cEWwYd8fV3gzew__',
+  woshuolesuan: 'eJwtzEELgjAYxvHvsmsh73TTELpIdBDJILt0kzb1banDuRZE3z1Tj8-vgf*HFNnFe8mBxMT3gGznjUJ2I1Y4s*tNY-unNLbs1t8IVWqNgsQ0BKBBwAO2PPKtcZCTc859AFh0xPZvUcQ4ZxHQtYL1lL861*x6Qw-ZPTmrvMnTvGUq4eGxUsVGnworklvqwD7cnnx-I7Y0yw__'
+};
+
+let currentUserID = '';
+let currentUserSig = '';
+let oppositeNick = '';
 
 let chat = null;
 const showChat = ref(false);
+const isLoggedIn = ref(false);
 const password = ref('');
 const errorMsg = ref('');
 const inputText = ref('');
 const messages = ref([]);
 const messageListRef = ref(null);
+const messageInput = ref(null);
+
+// 表情相关
+const showEmoji = ref(false);
+const emojiList = [
+  '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇',
+  '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚',
+  '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩',
+  '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣',
+  '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬',
+  '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗',
+  '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯',
+  '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐',
+  '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈',
+  '👿', '👹', '👺', '💀', '👻', '👽', '🤖', '🎃', '😺', '😸'
+];
+
+const toggleEmojiPanel = () => {
+  showEmoji.value = !showEmoji.value;
+};
+
+const insertEmoji = (emoji) => {
+  inputText.value += emoji;
+  showEmoji.value = false;
+  nextTick(() => {
+    messageInput.value.focus();
+  });
+};
 
 // 防偷窥计时
 let inactivityTimer = null;
 const INACTIVE_LIMIT = 2 * 60 * 1000;
 
-// 通知权限
 let notificationPermission = false;
 
 const resetTimer = () => {
@@ -89,13 +141,11 @@ const resetTimer = () => {
   }, INACTIVE_LIMIT);
 };
 
-// 格式化时间
 const formatTime = (timestamp) => {
   const date = new Date(timestamp * 1000);
   return `${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
 };
 
-// 添加消息到列表
 const addMessage = (message) => {
   messages.value.push(message);
   nextTick(() => {
@@ -105,7 +155,6 @@ const addMessage = (message) => {
   });
 };
 
-// 发送文本消息
 const sendTextMessage = async () => {
   const text = inputText.value.trim();
   if (!text) return;
@@ -123,7 +172,6 @@ const sendTextMessage = async () => {
   }
 };
 
-// 发送图片消息
 const sendImageMessage = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -138,19 +186,9 @@ const sendImageMessage = async (event) => {
   } catch (err) {
     console.error('发送图片失败', err);
   }
-  event.target.value = ''; // 清空 input，允许重复上传同一文件
+  event.target.value = '';
 };
 
-// 上报已读（收到消息后调用）
-const reportMessageRead = (messageList) => {
-  if (messageList.length === 0) return;
-  const lastMsg = messageList[messageList.length - 1];
-  if (lastMsg.flow === 'in') {
-    chat.setMessageRead({ conversationID: `C2C${targetUserID}` });
-  }
-};
-
-// 监听新消息
 const onMessageReceived = (event) => {
   const newMessages = event.data;
   newMessages.forEach(msg => {
@@ -162,7 +200,6 @@ const onMessageReceived = (event) => {
   }
 };
 
-// 监听消息已读回执（更新已读状态）
 const onMessageReadReceipt = (event) => {
   const receipts = event.data;
   receipts.forEach(receipt => {
@@ -171,42 +208,51 @@ const onMessageReadReceipt = (event) => {
   });
 };
 
-// 登录 IM
+const reportMessageRead = (messageList) => {
+  if (!messageList.length) return;
+  const lastMsg = messageList[messageList.length - 1];
+  if (lastMsg.flow === 'in') {
+    chat.setMessageRead({ conversationID: `C2C${targetUserID}` });
+  }
+};
+
 const loginIM = async () => {
   chat = TencentCloudChat.create({ SDKAppID });
-  chat.setLogLevel(0); // 减少日志输出
-  await chat.login({ userID: myUserID, userSig });
-  // 获取历史消息
-  const res = await chat.getMessageList({ conversationID: `C2C${targetUserID}`, count: 20 });
-  messages.value = res.data.messageList.reverse(); // 正序显示
+  chat.setLogLevel(0);
+  await chat.login({ userID: currentUserID, userSig: currentUserSig });
+  const conversationID = `C2C${targetUserID}`;
+  const res = await chat.getMessageList({ conversationID, count: 20 });
+  messages.value = res.data.messageList.reverse();
   reportMessageRead(messages.value);
-  // 注册事件
   chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, onMessageReceived);
   chat.on(TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT, onMessageReadReceipt);
+};
+
+const selectRole = async (role) => {
+  currentUserID = role;
+  currentUserSig = userSigMap[role];
+  oppositeNick = role === 'gongjuren' ? '我说了算' : '工具人';
+  await loginIM();
+  isLoggedIn.value = true;
   resetTimer();
 };
 
-// 密码验证
 const checkPassword = () => {
   const pwd = password.value;
   errorMsg.value = '';
-
   if (pwd === '19532026') {
     window.location.href = 'http://175.42.20.145:8081';
     return;
   }
-
   const len = pwd.length;
   if (len >= 4 && pwd[1] === '1' && pwd[2] === '3' && pwd[len-4] === '5' && pwd[len-3] === '7') {
     showChat.value = true;
     password.value = '';
-    loginIM();
     return;
   }
   errorMsg.value = '密码错误，无法进入';
 };
 
-// 请求通知权限
 const requestNotification = () => {
   if ('Notification' in window) {
     Notification.requestPermission().then(perm => notificationPermission = perm === 'granted');
@@ -216,6 +262,7 @@ const requestNotification = () => {
 onMounted(() => {
   requestNotification();
 });
+
 onUnmounted(() => {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   if (chat) chat.logout();
@@ -223,7 +270,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 密码界面样式（与之前一致） */
+/* 密码界面 */
 .password-container {
   display: flex;
   justify-content: center;
@@ -238,7 +285,10 @@ onUnmounted(() => {
   text-align: center;
   width: 300px;
 }
-.password-box h2 { color: #e9ecef; margin-bottom: 1.5rem; }
+.password-box h2 {
+  color: #e9ecef;
+  margin-bottom: 1.5rem;
+}
 .password-box input {
   width: 100%;
   padding: 10px;
@@ -257,7 +307,43 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
 }
-.error { color: #e74c3c; margin-top: 1rem; }
+.error {
+  color: #e74c3c;
+  margin-top: 1rem;
+}
+
+/* 身份选择 */
+.role-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #2c2f33;
+}
+.role-box {
+  background: #23272a;
+  padding: 2rem;
+  border-radius: 12px;
+  text-align: center;
+  width: 300px;
+}
+.role-box h2 {
+  color: #e9ecef;
+  margin-bottom: 1.5rem;
+}
+.role-box button {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  background: #4a4e54;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.role-box button:hover {
+  background: #5a5e64;
+}
 
 /* 聊天界面 */
 .chat-container {
@@ -273,10 +359,13 @@ onUnmounted(() => {
   justify-content: space-between;
   border-bottom: 1px solid #3a3f44;
 }
-.app-title { font-size: 1.2rem; color: #e9ecef; }
-.chat-with { color: #b9bbbe; }
-
-/* 消息列表 */
+.app-title {
+  font-size: 1.2rem;
+  color: #e9ecef;
+}
+.chat-with {
+  color: #b9bbbe;
+}
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -322,13 +411,38 @@ onUnmounted(() => {
 /* 输入区 */
 .input-area {
   background: #23272a;
-  padding: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
   border-top: 1px solid #3a3f44;
+  display: flex;
+  flex-direction: column;
 }
-.input-area input {
+.emoji-panel {
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #3a3f44;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.emoji-panel button {
+  background: #3a3f44;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: 0.1s;
+}
+.emoji-panel button:hover {
+  background: #5e5ce0;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+}
+.input-row input {
   flex: 1;
   background: #3a3f44;
   border: none;
@@ -336,8 +450,8 @@ onUnmounted(() => {
   border-radius: 20px;
   color: white;
 }
-.input-area button, .file-btn {
-  background: #5e5ce0;
+.input-row button, .file-btn {
+  background: #4a4e54;
   border: none;
   color: white;
   width: 36px;
@@ -348,9 +462,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
 }
+.emoji-btn {
+  background: #5e5ce0;
+}
 .file-btn {
   background: #4a4e54;
-  text-decoration: none;
-  font-size: 18px;
 }
 </style>
