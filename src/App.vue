@@ -251,7 +251,18 @@ const openSettings = () => {
   isLoggedIn.value = false;
   if (inactivityTimer) clearTimeout(inactivityTimer);
 };
-
+// 清理 userSig：去除前后空格、首尾引号、换行符
+const cleanUserSig = (raw) => {
+  if (!raw) return '';
+  let cleaned = raw.trim();
+  // 去掉首尾的引号（单引号或双引号）
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  // 移除所有换行和回车
+  cleaned = cleaned.replace(/[\r\n]/g, '');
+  return cleaned;
+};
 // 登录 IM 并开始聊天
 const startChat = async () => {
   if (loadingLogin.value) return;
