@@ -157,7 +157,14 @@ const loadConfig = () => {
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      config.value = { ...defaultConfig, ...parsed };
+      // 对存储的值进行 trim
+      config.value = {
+        ...defaultConfig,
+        SDKAppID: parsed.SDKAppID,
+        myUserID: (parsed.myUserID || '').trim(),
+        targetUserID: (parsed.targetUserID || '').trim(),
+        myUserSig: (parsed.myUserSig || '').trim()
+      };
       hasSavedConfig.value = true;
       targetUserNick.value = config.value.targetUserID;
       return true;
@@ -171,43 +178,56 @@ const loadConfig = () => {
 // 保存配置并开始聊天
 const saveAndStart = async () => {
   configError.value = '';
-  // 基本校验
-  if (!config.value.SDKAppID) {
+  // 获取并 trim 输入值
+  let sdkAppIdStr = (config.value.SDKAppID || '').toString().trim();
+  let myUserID = (config.value.myUserID || '').trim();
+  let targetUserID = (config.value.targetUserID || '').trim();
+  let myUserSig = (config.value.myUserSig || '').trim();
+
+  // 校验
+  if (!sdkAppIdStr) {
     configError.value = '请填写 SDKAppID';
     return;
   }
-  if (!config.value.myUserID) {
-    configError.value = '请填写自己的 userID';
-    return;
-  }
-  if (!config.value.targetUserID) {
-    configError.value = '请填写对方的 userID';
-    return;
-  }
-  if (!config.value.myUserSig) {
-    configError.value = '请填写自己的 userSig';
-    return;
-  }
-  // 检查 SDKAppID 是否为数字
-  const sdkAppIdNum = Number(config.value.SDKAppID);
+  const sdkAppIdNum = Number(sdkAppIdStr);
   if (isNaN(sdkAppIdNum)) {
     configError.value = 'SDKAppID 必须是数字';
     return;
   }
-  // 检查 userID 是否包含非法字符（简单检查）
+  if (!myUserID) {
+    configError.value = '请填写自己的 userID';
+    return;
+  }
+  if (!targetUserID) {
+    configError.value = '请填写对方的 userID';
+    return;
+  }
+  if (!myUserSig) {
+    configError.value = '请填写自己的 userSig';
+    return;
+  }
+
+  // 检查 userID 格式
   const userIdPattern = /^[a-zA-Z0-9_]+$/;
-  if (!userIdPattern.test(config.value.myUserID)) {
+  if (!userIdPattern.test(myUserID)) {
     configError.value = 'userID 只能包含字母、数字和下划线';
     return;
   }
-  if (!userIdPattern.test(config.value.targetUserID)) {
+  if (!userIdPattern.test(targetUserID)) {
     configError.value = '对方 userID 只能包含字母、数字和下划线';
     return;
   }
-  // 保存到 localStorage
+
+  // 保存 trim 后的值
+  config.value = {
+    SDKAppID: sdkAppIdNum,
+    myUserID,
+    targetUserID,
+    myUserSig
+  };
   localStorage.setItem('fjad_chat_config', JSON.stringify(config.value));
   hasSavedConfig.value = true;
-  targetUserNick.value = config.value.targetUserID;
+  targetUserNick.value = targetUserID;
   showConfig.value = false;
   await startChat();
 };
@@ -236,22 +256,42 @@ const openSettings = () => {
 const startChat = async () => {
   if (loadingLogin.value) return;
   loadingLogin.value = true;
-  configError.value = ''; // 清空之前的错误
+  configError.value = '';
   try {
+    // 获取参数（已经过 trim）
+    const sdkAppId = config.value.SDKAppID;
+    const userID = config.value.myUserID;
+    const userSig = config.value.myUserSig;
+    const targetID = config.value.targetUserID;
+
+    console.log('🔍 准备登录，参数检查：');
+    console.log('  SDKAppID:', sdkAppId, '类型:', typeof sdkAppId);
+    console.log('  userID:', userID, '长度:', userID.length);
+    console.log('  userSig 长度:', userSig.length);
+    console.log('  targetUserID:', targetID);
+
+    if (userSig.length < 100) {
+      console.warn('⚠️ userSig 长度较短，可能不完整');
+    }
+
     if (chat) {
       await chat.logout();
       chat = null;
     }
-    const sdkAppIdNum = Number(config.value.SDKAppID);
-    chat = TencentCloudChat.create({ SDKAppID: sdkAppIdNum });
+    chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     chat.setLogLevel(0);
-    await chat.login({ userID: config.value.myUserID, userSig: config.value.myUserSig });
+    console.log('🔑 正在调用 login...');
+    await chat.login({ userID, userSig });
+    console.log('✅ login 成功');
+
     // 等待 SDK 就绪
     await new Promise((resolve) => {
       if (chat.isReady()) resolve();
       else chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
     });
-    const conversationID = `C2C${config.value.targetUserID}`;
+    console.log('✅ SDK ready');
+
+    const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
     messages.value = res.data.messageList.reverse();
     reportMessageRead(messages.value);
@@ -260,8 +300,8 @@ const startChat = async () => {
     isLoggedIn.value = true;
     resetTimer();
   } catch (err) {
-    console.error('登录失败', err);
-    // 提取详细错误信息
+    console.error('❌ 登录失败', err);
+    // 提取详细错误
     let errorDetail = '';
     if (err.code) {
       errorDetail += `错误码：${err.code}`;
@@ -408,6 +448,8 @@ onUnmounted(() => {
   if (chat) chat.logout();
 });
 </script>
+
+
 
 <style scoped>
 /* 所有样式保持不变，与上一版一致 */
