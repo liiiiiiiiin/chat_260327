@@ -279,6 +279,19 @@ const startChat = async () => {
       chat = null;
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
+    // 注册上传插件（支持图片、视频、文件等）
+import COS from 'cos-js-sdk-v5';  // 注意：需要安装这个依赖
+
+// 如果你还没有安装 cos-js-sdk-v5，请先运行：
+// npm install cos-js-sdk-v5
+
+const cos = new COS({
+  getAuthorization: (options, callback) => {
+    // 直接使用 SDK 内置的上传能力，无需额外配置
+    callback({ Authorization: '', SecurityToken: '' });
+  }
+});
+chat.registerPlugin({ 'cos': cos });
     chat.setLogLevel(0);
     console.log('🔑 正在调用 login...');
     await chat.login({ userID, userSig });
@@ -295,7 +308,8 @@ const startChat = async () => {
     const res = await chat.getMessageList({ conversationID, count: 20 });
     messages.value = res.data.messageList.reverse();
     reportMessageRead(messages.value);
-    // ⭐ 关键修复：使用正确的事件名称（字符串形式）
+
+    // 在 SDK ready 之后注册
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
     isLoggedIn.value = true;
@@ -384,8 +398,8 @@ const sendImageMessage = async (event) => {
   }
   event.target.value = '';
 };
-
 const onMessageReceived = (event) => {
+  console.log('🔥 收到新消息', event.data);
   const newMessages = event.data;
   newMessages.forEach(msg => addMessage(msg));
   reportMessageRead(newMessages);
