@@ -184,6 +184,14 @@ const saveAndStart = async () => {
   let targetUserID = (config.value.targetUserID || '').trim();
   let myUserSig = (config.value.myUserSig || '').trim();
 
+  // 🔍 添加日志：查看原始输入长度
+  console.log('原始 userSig 长度:', myUserSigRaw.length);
+  console.log('原始 userSig 前50字符:', myUserSigRaw.substring(0, 50));
+
+  let myUserSig = cleanUserSig(myUserSigRaw);
+  console.log('清理后 userSig 长度:', myUserSig.length);
+  console.log('清理后 userSig 前50字符:', myUserSig.substring(0, 50));
+  
   // 校验
   if (!sdkAppIdStr) {
     configError.value = '请填写 SDKAppID';
@@ -251,18 +259,7 @@ const openSettings = () => {
   isLoggedIn.value = false;
   if (inactivityTimer) clearTimeout(inactivityTimer);
 };
-// 清理 userSig：去除前后空格、首尾引号、换行符
-const cleanUserSig = (raw) => {
-  if (!raw) return '';
-  let cleaned = raw.trim();
-  // 去掉首尾的引号（单引号或双引号）
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
-  }
-  // 移除所有换行和回车
-  cleaned = cleaned.replace(/[\r\n]/g, '');
-  return cleaned;
-};
+
 // 登录 IM 并开始聊天
 const startChat = async () => {
   if (loadingLogin.value) return;
