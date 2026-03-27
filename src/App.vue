@@ -295,9 +295,9 @@ const startChat = async () => {
     const res = await chat.getMessageList({ conversationID, count: 20 });
     messages.value = res.data.messageList.reverse();
     reportMessageRead(messages.value);
-    // ⭐ 修正：使用字符串常量注册事件（避免 EVENT 未定义）
-    chat.on('TencentCloudChat.EVENT.MESSAGE_RECEIVED', onMessageReceived);
-    chat.on('TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT', onMessageReadReceipt);
+    // ⭐ 关键修复：使用正确的事件名称（字符串形式）
+    chat.on('MESSAGE_RECEIVED', onMessageReceived);
+    chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
     isLoggedIn.value = true;
     resetTimer();
   } catch (err) {
