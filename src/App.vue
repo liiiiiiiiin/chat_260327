@@ -22,10 +22,12 @@
       <div class="config-field">
         <label>SDKAppID</label>
         <input v-model="config.SDKAppID" type="number" placeholder="例如 1400123456" />
+        <small>在腾讯云 IM 控制台 → 应用信息 中查看</small>
       </div>
       <div class="config-field">
         <label>自己的 userID</label>
         <input v-model="config.myUserID" placeholder="例如 gongjuren" />
+        <small>只能包含字母、数字、下划线</small>
       </div>
       <div class="config-field">
         <label>对方的 userID</label>
@@ -34,9 +36,10 @@
       <div class="config-field">
         <label>自己的 userSig</label>
         <textarea v-model="config.myUserSig" rows="2" placeholder="从控制台复制，很长一串"></textarea>
+        <small><a href="https://console.cloud.tencent.com/im/tool-usersig" target="_blank">点击获取 UserSig</a>（需登录腾讯云）</small>
       </div>
       <div class="config-buttons">
-        <button @click="saveAndStart">保存并开始聊天</button>
+        <button @click="saveAndStart" :disabled="loadingLogin">保存并开始聊天</button>
         <button v-if="hasSavedConfig" @click="resetConfig">重置配置</button>
       </div>
       <p v-if="configError" class="error">{{ configError }}</p>
@@ -168,14 +171,40 @@ const loadConfig = () => {
 // 保存配置并开始聊天
 const saveAndStart = async () => {
   configError.value = '';
-  if (!config.value.SDKAppID || !config.value.myUserID || !config.value.targetUserID || !config.value.myUserSig) {
-    configError.value = '请填写所有字段';
+  // 基本校验
+  if (!config.value.SDKAppID) {
+    configError.value = '请填写 SDKAppID';
     return;
   }
-  if (isNaN(Number(config.value.SDKAppID))) {
+  if (!config.value.myUserID) {
+    configError.value = '请填写自己的 userID';
+    return;
+  }
+  if (!config.value.targetUserID) {
+    configError.value = '请填写对方的 userID';
+    return;
+  }
+  if (!config.value.myUserSig) {
+    configError.value = '请填写自己的 userSig';
+    return;
+  }
+  // 检查 SDKAppID 是否为数字
+  const sdkAppIdNum = Number(config.value.SDKAppID);
+  if (isNaN(sdkAppIdNum)) {
     configError.value = 'SDKAppID 必须是数字';
     return;
   }
+  // 检查 userID 是否包含非法字符（简单检查）
+  const userIdPattern = /^[a-zA-Z0-9_]+$/;
+  if (!userIdPattern.test(config.value.myUserID)) {
+    configError.value = 'userID 只能包含字母、数字和下划线';
+    return;
+  }
+  if (!userIdPattern.test(config.value.targetUserID)) {
+    configError.value = '对方 userID 只能包含字母、数字和下划线';
+    return;
+  }
+  // 保存到 localStorage
   localStorage.setItem('fjad_chat_config', JSON.stringify(config.value));
   hasSavedConfig.value = true;
   targetUserNick.value = config.value.targetUserID;
@@ -207,12 +236,14 @@ const openSettings = () => {
 const startChat = async () => {
   if (loadingLogin.value) return;
   loadingLogin.value = true;
+  configError.value = ''; // 清空之前的错误
   try {
     if (chat) {
       await chat.logout();
       chat = null;
     }
-    chat = TencentCloudChat.create({ SDKAppID: Number(config.value.SDKAppID) });
+    const sdkAppIdNum = Number(config.value.SDKAppID);
+    chat = TencentCloudChat.create({ SDKAppID: sdkAppIdNum });
     chat.setLogLevel(0);
     await chat.login({ userID: config.value.myUserID, userSig: config.value.myUserSig });
     // 等待 SDK 就绪
@@ -230,9 +261,21 @@ const startChat = async () => {
     resetTimer();
   } catch (err) {
     console.error('登录失败', err);
-    const errorMsg = err.message || (err.data?.message) || `登录失败，请检查配置。错误码：${err.code || '未知'}`;
-    configError.value = errorMsg;
-    showConfig.value = true; // 回到配置界面让用户修改
+    // 提取详细错误信息
+    let errorDetail = '';
+    if (err.code) {
+      errorDetail += `错误码：${err.code}`;
+    }
+    if (err.message) {
+      errorDetail += `，消息：${err.message}`;
+    } else if (err.data?.message) {
+      errorDetail += `，消息：${err.data.message}`;
+    }
+    if (!errorDetail) {
+      errorDetail = '参数验证失败，请检查 SDKAppID、userID 和 userSig 是否正确';
+    }
+    configError.value = `登录失败：${errorDetail}`;
+    showConfig.value = true; // 回到配置界面
     if (chat) {
       await chat.logout().catch(() => {});
       chat = null;
@@ -247,7 +290,6 @@ const resetTimer = () => {
   if (!isLoggedIn.value) return;
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    // 2分钟无操作，跳回密码界面
     if (chat) chat.logout();
     showChat.value = false;
     isLoggedIn.value = false;
@@ -368,7 +410,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 密码界面 */
+/* 所有样式保持不变，与上一版一致 */
 .password-container {
   display: flex;
   justify-content: center;
@@ -423,7 +465,7 @@ onUnmounted(() => {
   padding: 2rem;
   border-radius: 12px;
   text-align: center;
-  width: 350px;
+  width: 400px;
 }
 .config-field {
   text-align: left;
@@ -447,6 +489,16 @@ onUnmounted(() => {
 .config-field textarea {
   resize: vertical;
 }
+.config-field small {
+  display: block;
+  color: #b9bbbe;
+  font-size: 0.7rem;
+  margin-top: 4px;
+}
+.config-field a {
+  color: #5e5ce0;
+  text-decoration: none;
+}
 .config-buttons {
   display: flex;
   gap: 10px;
@@ -460,6 +512,10 @@ onUnmounted(() => {
   border: none;
   border-radius: 6px;
   cursor: pointer;
+}
+.config-buttons button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 聊天界面 */
@@ -494,8 +550,6 @@ onUnmounted(() => {
 .settings-btn:hover {
   color: #e9ecef;
 }
-
-/* 消息列表 */
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -537,8 +591,6 @@ onUnmounted(() => {
   margin-top: 2px;
   text-align: right;
 }
-
-/* 输入区 */
 .input-area {
   background: #23272a;
   border-top: 1px solid #3a3f44;
