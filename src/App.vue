@@ -15,13 +15,31 @@
     </div>
   </div>
 
-  <!-- 身份选择界面 -->
-  <div v-else-if="!isLoggedIn" class="role-container">
-    <div class="role-box">
-      <h2>选择你的身份</h2>
-      <button @click="selectRole('gongjuren')" :disabled="loadingRole">工具人</button>
-      <button @click="selectRole('woshuolesuan')" :disabled="loadingRole">我说了算</button>
-      <p v-if="roleError" class="error">{{ roleError }}</p>
+  <!-- 配置界面 -->
+  <div v-else-if="showConfig" class="config-container">
+    <div class="config-box">
+      <h2>聊天设置</h2>
+      <div class="config-field">
+        <label>SDKAppID</label>
+        <input v-model="config.SDKAppID" type="number" placeholder="例如 1400123456" />
+      </div>
+      <div class="config-field">
+        <label>自己的 userID</label>
+        <input v-model="config.myUserID" placeholder="例如 gongjuren" />
+      </div>
+      <div class="config-field">
+        <label>对方的 userID</label>
+        <input v-model="config.targetUserID" placeholder="例如 woshuolesuan" />
+      </div>
+      <div class="config-field">
+        <label>自己的 userSig</label>
+        <textarea v-model="config.myUserSig" rows="2" placeholder="从控制台复制，很长一串"></textarea>
+      </div>
+      <div class="config-buttons">
+        <button @click="saveAndStart">保存并开始聊天</button>
+        <button v-if="hasSavedConfig" @click="resetConfig">重置配置</button>
+      </div>
+      <p v-if="configError" class="error">{{ configError }}</p>
     </div>
   </div>
 
@@ -29,7 +47,8 @@
   <div v-else class="chat-container" @mousemove="resetTimer" @click="resetTimer" @keydown="resetTimer">
     <div class="chat-header-custom">
       <span class="app-title">FJAD审图</span>
-      <span class="chat-with">{{ oppositeNick }}</span>
+      <span class="chat-with">与 {{ targetUserNick }} 聊天</span>
+      <button class="settings-btn" @click="openSettings">⚙️</button>
     </div>
 
     <div class="message-list" ref="messageListRef">
@@ -75,36 +94,39 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import TencentCloudChat from '@tencentcloud/chat';
 
-// ========== 请替换为你的腾讯云 IM 配置 ==========
-const SDKAppID = 1600133534;               // 你的 SDKAppID
-const targetUserID = 'woshuolesuan'; // 对方的固定ID
-// =============================================
-
-// ⚠️ 重要：替换为两个用户的真实 UserSig（从腾讯云控制台获取）
-const userSigMap = {
-  gongjuren: 'eJwtzE0LgkAUheH-MttCr47XIcFNZREIBWYkuAkc7U5ofhNF-z1Tl*c58H7Y2Q*0XtbMYaYGbDluSmTRUkojZ88iU10ti-lsksetLClhjmEDGJwjt6ZHvkqq5eCIaALApC3lfxPCQrQRVnOFsqG9D7E59ekV1iFfdEfxVrGe*yKozO1mF1w8dagidfdkF*tp5LLvD5lhM4M_',      // 替换为工具人的 UserSig
-  woshuolesuan: 'eJwtzLEOgjAUheF36Yoht9CCIXEhuiCyQBTHJi14AQEpCInx3UVgPN*fnA9Jwth8q454xDKB7JaNUtU9Zrjw2OjH0FRKD6LeupalaFuUxKMOALVtbrO1qKnFTs3OObcAYNUen39zXca5w*imGvP5HuR4xfslOAapmKKmSHwwqqyiYczKfZEYJzGk8Iqi8y0-kO8PGjg0QA__'  // 替换为我说了算的 UserSig
+// 默认配置
+const defaultConfig = {
+  SDKAppID: 0,
+  myUserID: '',
+  targetUserID: '',
+  myUserSig: ''
 };
 
-let currentUserID = '';
-let currentUserSig = '';
-let oppositeNick = '';
-
-let chat = null;
+// 页面状态
 const showChat = ref(false);
+const showConfig = ref(false);
 const isLoggedIn = ref(false);
-const loadingRole = ref(false);
-const roleError = ref('');
-
+const loadingLogin = ref(false);
+const configError = ref('');
 const password = ref('');
 const errorMsg = ref('');
+
+// 聊天相关
 const inputText = ref('');
 const messages = ref([]);
 const messageListRef = ref(null);
 const messageInput = ref(null);
+let chat = null;
+let inactivityTimer = null;
+const INACTIVE_LIMIT = 2 * 60 * 1000;
+let notificationPermission = false;
 
-// 表情相关
-const showEmoji = ref(false);
+// 当前配置
+const config = ref({ ...defaultConfig });
+const hasSavedConfig = ref(false);
+const targetUserNick = ref('');
+
+// 表情列表
 const emojiList = [
   '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇',
   '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚',
@@ -118,30 +140,117 @@ const emojiList = [
   '👿', '👹', '👺', '💀', '👻', '👽', '🤖', '🎃', '😺', '😸'
 ];
 
-const toggleEmojiPanel = () => {
-  showEmoji.value = !showEmoji.value;
-};
-
+const showEmoji = ref(false);
+const toggleEmojiPanel = () => { showEmoji.value = !showEmoji.value; };
 const insertEmoji = (emoji) => {
   inputText.value += emoji;
   showEmoji.value = false;
-  nextTick(() => {
-    messageInput.value.focus();
-  });
+  nextTick(() => messageInput.value.focus());
+};
+
+// 加载本地配置
+const loadConfig = () => {
+  const saved = localStorage.getItem('fjad_chat_config');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      config.value = { ...defaultConfig, ...parsed };
+      hasSavedConfig.value = true;
+      targetUserNick.value = config.value.targetUserID;
+      return true;
+    } catch (e) {
+      console.warn('配置读取失败', e);
+    }
+  }
+  return false;
+};
+
+// 保存配置并开始聊天
+const saveAndStart = async () => {
+  configError.value = '';
+  if (!config.value.SDKAppID || !config.value.myUserID || !config.value.targetUserID || !config.value.myUserSig) {
+    configError.value = '请填写所有字段';
+    return;
+  }
+  if (isNaN(Number(config.value.SDKAppID))) {
+    configError.value = 'SDKAppID 必须是数字';
+    return;
+  }
+  localStorage.setItem('fjad_chat_config', JSON.stringify(config.value));
+  hasSavedConfig.value = true;
+  targetUserNick.value = config.value.targetUserID;
+  showConfig.value = false;
+  await startChat();
+};
+
+// 重置配置
+const resetConfig = () => {
+  localStorage.removeItem('fjad_chat_config');
+  config.value = { ...defaultConfig };
+  hasSavedConfig.value = false;
+  showConfig.value = true;
+};
+
+// 打开设置（从聊天界面）
+const openSettings = () => {
+  if (chat) {
+    chat.logout();
+    chat = null;
+  }
+  showChat.value = false;
+  showConfig.value = true;
+  isLoggedIn.value = false;
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+};
+
+// 登录 IM 并开始聊天
+const startChat = async () => {
+  if (loadingLogin.value) return;
+  loadingLogin.value = true;
+  try {
+    if (chat) {
+      await chat.logout();
+      chat = null;
+    }
+    chat = TencentCloudChat.create({ SDKAppID: Number(config.value.SDKAppID) });
+    chat.setLogLevel(0);
+    await chat.login({ userID: config.value.myUserID, userSig: config.value.myUserSig });
+    // 等待 SDK 就绪
+    await new Promise((resolve) => {
+      if (chat.isReady()) resolve();
+      else chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
+    });
+    const conversationID = `C2C${config.value.targetUserID}`;
+    const res = await chat.getMessageList({ conversationID, count: 20 });
+    messages.value = res.data.messageList.reverse();
+    reportMessageRead(messages.value);
+    chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, onMessageReceived);
+    chat.on(TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT, onMessageReadReceipt);
+    isLoggedIn.value = true;
+    resetTimer();
+  } catch (err) {
+    console.error('登录失败', err);
+    const errorMsg = err.message || (err.data?.message) || `登录失败，请检查配置。错误码：${err.code || '未知'}`;
+    configError.value = errorMsg;
+    showConfig.value = true; // 回到配置界面让用户修改
+    if (chat) {
+      await chat.logout().catch(() => {});
+      chat = null;
+    }
+  } finally {
+    loadingLogin.value = false;
+  }
 };
 
 // 防偷窥计时
-let inactivityTimer = null;
-const INACTIVE_LIMIT = 2 * 60 * 1000;
-
-let notificationPermission = false;
-
 const resetTimer = () => {
-  if (!showChat.value) return;
+  if (!isLoggedIn.value) return;
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    showChat.value = false;
+    // 2分钟无操作，跳回密码界面
     if (chat) chat.logout();
+    showChat.value = false;
+    isLoggedIn.value = false;
   }, INACTIVE_LIMIT);
 };
 
@@ -163,7 +272,7 @@ const sendTextMessage = async () => {
   const text = inputText.value.trim();
   if (!text) return;
   const message = chat.createTextMessage({
-    to: targetUserID,
+    to: config.value.targetUserID,
     conversationType: TencentCloudChat.TYPES.CONV_C2C,
     payload: { text }
   });
@@ -180,7 +289,7 @@ const sendImageMessage = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
   const message = chat.createImageMessage({
-    to: targetUserID,
+    to: config.value.targetUserID,
     conversationType: TencentCloudChat.TYPES.CONV_C2C,
     payload: { file }
   });
@@ -195,9 +304,7 @@ const sendImageMessage = async (event) => {
 
 const onMessageReceived = (event) => {
   const newMessages = event.data;
-  newMessages.forEach(msg => {
-    addMessage(msg);
-  });
+  newMessages.forEach(msg => addMessage(msg));
   reportMessageRead(newMessages);
   if (notificationPermission && document.hidden) {
     new Notification('新消息', { body: newMessages[0]?.payload?.text || '您收到一条新消息' });
@@ -216,70 +323,11 @@ const reportMessageRead = (messageList) => {
   if (!messageList.length) return;
   const lastMsg = messageList[messageList.length - 1];
   if (lastMsg.flow === 'in') {
-    chat.setMessageRead({ conversationID: `C2C${targetUserID}` });
+    chat.setMessageRead({ conversationID: `C2C${config.value.targetUserID}` });
   }
 };
 
-// 修改 loginIM 函数
-const loginIM = async () => {
-  if (chat) {
-    await chat.logout();
-    chat = null;
-  }
-  chat = TencentCloudChat.create({ SDKAppID });
-  chat.setLogLevel(0);
-  // 登录
-  await chat.login({ userID: currentUserID, userSig: currentUserSig });
-  
-  // 等待 SDK 就绪
-  await new Promise((resolve) => {
-    if (chat.isReady()) {
-      resolve();
-    } else {
-      chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
-    }
-  });
-  
-  // 现在可以安全调用 getMessageList
-  const conversationID = `C2C${targetUserID}`;
-  const res = await chat.getMessageList({ conversationID, count: 20 });
-  messages.value = res.data.messageList.reverse();
-  reportMessageRead(messages.value);
-  
-  // 注册事件监听
-  chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, onMessageReceived);
-  chat.on(TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT, onMessageReadReceipt);
-};
-
-
-const selectRole = async (role) => {
-  if (loadingRole.value) return;
-  loadingRole.value = true;
-  roleError.value = '';
-  try {
-    currentUserID = role;
-    currentUserSig = userSigMap[role];
-    // 简单检查 UserSig 是否被替换
-    if (currentUserSig.includes('你的工具人UserSig') || currentUserSig.includes('你的我说了算UserSig')) {
-      throw new Error('请先在代码中填写正确的 UserSig！');
-    }
-    oppositeNick = role === 'gongjuren' ? '我说了算' : '工具人';
-    await loginIM();
-    isLoggedIn.value = true;
-    resetTimer();
-  } catch (err) {
-    console.error('登录失败', err);
-    roleError.value = err.message || '登录失败，请检查 UserSig 是否正确';
-    // 清理可能残留的聊天实例
-    if (chat) {
-      await chat.logout().catch(() => {});
-      chat = null;
-    }
-  } finally {
-    loadingRole.value = false;
-  }
-};
-
+// 密码验证
 const checkPassword = () => {
   const pwd = password.value;
   errorMsg.value = '';
@@ -291,6 +339,13 @@ const checkPassword = () => {
   if (len >= 4 && pwd[1] === '1' && pwd[2] === '3' && pwd[len-4] === '5' && pwd[len-3] === '7') {
     showChat.value = true;
     password.value = '';
+    const hasConfig = loadConfig();
+    if (!hasConfig) {
+      showConfig.value = true;
+    } else {
+      // 配置存在，直接开始聊天
+      startChat();
+    }
     return;
   }
   errorMsg.value = '密码错误，无法进入';
@@ -355,41 +410,56 @@ onUnmounted(() => {
   margin-top: 1rem;
 }
 
-/* 身份选择 */
-.role-container {
+/* 配置界面 */
+.config-container {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
   background: #2c2f33;
 }
-.role-box {
+.config-box {
   background: #23272a;
   padding: 2rem;
   border-radius: 12px;
   text-align: center;
-  width: 300px;
+  width: 350px;
 }
-.role-box h2 {
+.config-field {
+  text-align: left;
+  margin-bottom: 1rem;
+}
+.config-field label {
+  display: block;
   color: #e9ecef;
-  margin-bottom: 1.5rem;
+  margin-bottom: 5px;
+  font-size: 0.9rem;
 }
-.role-box button {
+.config-field input, .config-field textarea {
   width: 100%;
-  padding: 10px;
-  margin: 10px 0;
+  padding: 8px;
+  background: #2c2f33;
+  border: 1px solid #4a4e54;
+  color: #fff;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.config-field textarea {
+  resize: vertical;
+}
+.config-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.config-buttons button {
+  padding: 8px 16px;
   background: #4a4e54;
   color: white;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-}
-.role-box button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.role-box button:hover:not(:disabled) {
-  background: #5a5e64;
 }
 
 /* 聊天界面 */
@@ -404,6 +474,7 @@ onUnmounted(() => {
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   border-bottom: 1px solid #3a3f44;
 }
 .app-title {
@@ -413,6 +484,18 @@ onUnmounted(() => {
 .chat-with {
   color: #b9bbbe;
 }
+.settings-btn {
+  background: none;
+  border: none;
+  color: #b9bbbe;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.settings-btn:hover {
+  color: #e9ecef;
+}
+
+/* 消息列表 */
 .message-list {
   flex: 1;
   overflow-y: auto;
