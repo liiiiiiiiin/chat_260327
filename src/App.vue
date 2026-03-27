@@ -258,10 +258,9 @@ const startChat = async () => {
   loadingLogin.value = true;
   configError.value = '';
   try {
-    // 获取参数（已经过 trim）
     const sdkAppId = config.value.SDKAppID;
     const userID = config.value.myUserID;
-    const userSig = config.value.myUserSig;
+    const userSig = cleanUserSig(config.value.myUserSigRaw);
     const targetID = config.value.targetUserID;
 
     console.log('🔍 准备登录，参数检查：');
@@ -270,28 +269,11 @@ const startChat = async () => {
     console.log('  userSig 长度:', userSig.length);
     console.log('  targetUserID:', targetID);
 
-    if (userSig.length < 100) {
-      console.warn('⚠️ userSig 长度较短，可能不完整');
-    }
-
     if (chat) {
       await chat.logout();
       chat = null;
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
-    // 注册上传插件（支持图片、视频、文件等）
-import COS from 'cos-js-sdk-v5';  // 注意：需要安装这个依赖
-
-// 如果你还没有安装 cos-js-sdk-v5，请先运行：
-// npm install cos-js-sdk-v5
-
-const cos = new COS({
-  getAuthorization: (options, callback) => {
-    // 直接使用 SDK 内置的上传能力，无需额外配置
-    callback({ Authorization: '', SecurityToken: '' });
-  }
-});
-chat.registerPlugin({ 'cos': cos });
     chat.setLogLevel(0);
     console.log('🔑 正在调用 login...');
     await chat.login({ userID, userSig });
@@ -306,17 +288,18 @@ chat.registerPlugin({ 'cos': cos });
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    messages.value = res.data.messageList.reverse();
+    // 注意：getMessageList 返回的消息是倒序（最新在最后），我们需要正序显示
+    messages.value = res.data.messageList.reverse(); // 按时间升序
     reportMessageRead(messages.value);
 
-    // 在 SDK ready 之后注册
+    // ⭐ 关键修复：使用字符串事件名（官方推荐）
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
+
     isLoggedIn.value = true;
     resetTimer();
   } catch (err) {
-    console.error('❌ 登录失败', err);
-    // 提取详细错误
+    console.error('❌ 登录失败，完整错误对象:', err);
     let errorDetail = '';
     if (err.code) {
       errorDetail += `错误码：${err.code}`;
@@ -327,10 +310,10 @@ chat.registerPlugin({ 'cos': cos });
       errorDetail += `，消息：${err.data.message}`;
     }
     if (!errorDetail) {
-      errorDetail = '参数验证失败，请检查 SDKAppID、userID 和 userSig 是否正确';
+      errorDetail = '参数验证失败，请检查 SDKAppID、userID 和 userSig 是否正确。注意：userSig 必须使用您填写的 userID 在控制台生成。';
     }
     configError.value = `登录失败：${errorDetail}`;
-    showConfig.value = true; // 回到配置界面
+    showConfig.value = true;
     if (chat) {
       await chat.logout().catch(() => {});
       chat = null;
@@ -399,10 +382,27 @@ const sendImageMessage = async (event) => {
   event.target.value = '';
 };
 const onMessageReceived = (event) => {
-  console.log('🔥 收到新消息', event.data);
+  console.log('🔥 收到新消息', event.data);  // 调试日志
   const newMessages = event.data;
-  newMessages.forEach(msg => addMessage(msg));
+  if (!newMessages || newMessages.length === 0) return;
+
+  // 将新消息添加到现有列表
+  messages.value.push(...newMessages);
+
+  // 按消息时间排序（升序，时间戳小的在前）
+  messages.value.sort((a, b) => a.time - b.time);
+
+  // 滚动到底部
+  nextTick(() => {
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
+    }
+  });
+
+  // 上报已读（收到对方消息后自动标记为已读）
   reportMessageRead(newMessages);
+
+  // 浏览器通知
   if (notificationPermission && document.hidden) {
     new Notification('新消息', { body: newMessages[0]?.payload?.text || '您收到一条新消息' });
   }
