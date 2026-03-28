@@ -49,9 +49,8 @@
 
   <!-- 聊天界面 -->
   <div v-else class="chat-container" @mousemove="resetTimer" @click="resetTimer" @keydown="resetTimer">
+    <!-- 头部只保留居中设置按钮 -->
     <div class="chat-header-custom">
-      <span class="app-title">FJAD审图</span>
-      <span class="chat-with">与 {{ targetUserNick }} 聊天</span>
       <button class="settings-btn" @click="openSettings">⚙️</button>
     </div>
 
@@ -293,7 +292,7 @@ const startChat = async () => {
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     
-    // 注册 COS 插件（图片可选，保留但不影响文字）
+    // 注册 COS 插件（图片可选，不影响文字）
     try {
       const cos = new COS({
         getAuthorization: (options, callback) => {
@@ -460,7 +459,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 移动端优化样式 */
+/* 密码界面 */
 .password-container {
   display: flex;
   justify-content: center;
@@ -598,19 +597,10 @@ onUnmounted(() => {
   background: #23272a;
   padding: 14px 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   border-bottom: 1px solid #3a3f44;
   flex-shrink: 0;
-}
-.app-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #e9ecef;
-}
-.chat-with {
-  font-size: 0.9rem;
-  color: #b9bbbe;
 }
 .settings-btn {
   background: none;
