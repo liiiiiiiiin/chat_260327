@@ -97,6 +97,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import TencentCloudChat from '@tencentcloud/chat';
+import COS from 'cos-js-sdk-v5';
 
 const defaultConfig = {
   SDKAppID: 0,
@@ -121,9 +122,9 @@ const messageListRef = ref(null);
 const messageInput = ref(null);
 let chat = null;
 let inactivityTimer = null;
-let pollTimer = null; // 轮询定时器
+let pollTimer = null;
 const INACTIVE_LIMIT = 2 * 60 * 1000;
-const POLL_INTERVAL = 3000; // 3秒轮询一次
+const POLL_INTERVAL = 3000;
 let notificationPermission = false;
 
 const config = ref({ ...defaultConfig });
@@ -259,16 +260,12 @@ const fetchNewMessages = async () => {
     const conversationID = `C2C${config.value.targetUserID}`;
     const lastMsg = messages.value[messages.value.length - 1];
     const lastMsgTime = lastMsg ? lastMsg.time : 0;
-    // 获取比 lastMsgTime 更新的消息
     const res = await chat.getMessageList({ conversationID, count: 20, lastMsgTime });
     if (res.data.messageList && res.data.messageList.length > 0) {
-      // 过滤掉已存在的消息（按ID去重）
       const existingIds = new Set(messages.value.map(m => m.ID));
       const newMsgs = res.data.messageList.filter(msg => !existingIds.has(msg.ID));
       if (newMsgs.length > 0) {
-        // 按时间升序插入
         newMsgs.forEach(msg => addMessage(msg));
-        // 上报已读
         reportMessageRead(newMsgs);
         if (notificationPermission && document.hidden) {
           new Notification('新消息', { body: newMsgs[0]?.payload?.text || '您收到一条新消息' });
@@ -299,6 +296,15 @@ const startChat = async () => {
       chat = null;
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
+    
+    // 注册 COS 上传插件（支持图片、视频、文件）
+    const cos = new COS({
+      getAuthorization: (options, callback) => {
+        callback({ Authorization: '', SecurityToken: '' });
+      }
+    });
+    chat.registerPlugin({ 'cos': cos });
+    
     chat.setLogLevel(0);
     await chat.login({ userID, userSig });
     await new Promise((resolve) => {
@@ -312,7 +318,7 @@ const startChat = async () => {
     messages.value = res.data.messageList.slice().sort((a, b) => a.time - b.time);
     reportMessageRead(messages.value);
 
-    // 注册事件（双保险，如果事件能触发更好）
+    // 注册事件（双保险）
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
     console.log('事件已注册');
@@ -471,7 +477,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 样式与之前完全相同，此处省略（可从上一版本复制） */
+/* 样式完整（与上一版本一致） */
 .password-container {
   display: flex;
   justify-content: center;
