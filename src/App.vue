@@ -84,10 +84,6 @@
           ref="messageInput"
         />
         <button class="emoji-btn" @click="toggleEmojiPanel">😀</button>
-        <label class="file-btn">
-          📎
-          <input type="file" accept="image/*" @change="sendImageMessage" style="display: none;" />
-        </label>
         <button @click="sendTextMessage">发送</button>
       </div>
     </div>
@@ -297,15 +293,17 @@ const startChat = async () => {
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     
-    // 注册 COS 上传插件
-    console.log('正在注册 COS 插件...');
-    const cos = new COS({
-      getAuthorization: (options, callback) => {
-        callback({ Authorization: '', SecurityToken: '' });
-      }
-    });
-    chat.registerPlugin({ 'cos': cos });
-    console.log('COS 插件注册完成');
+    // 注册 COS 插件（图片可选，保留但不影响文字）
+    try {
+      const cos = new COS({
+        getAuthorization: (options, callback) => {
+          callback({ Authorization: '', SecurityToken: '' });
+        }
+      });
+      chat.registerPlugin({ 'cos': cos });
+    } catch (err) {
+      console.warn('COS 插件注册失败，图片可能无法发送', err);
+    }
     
     chat.setLogLevel(0);
     await chat.login({ userID, userSig });
@@ -320,7 +318,7 @@ const startChat = async () => {
     messages.value = res.data.messageList.slice().sort((a, b) => a.time - b.time);
     reportMessageRead(messages.value);
 
-    // 注册事件（双保险）
+    // 注册事件
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
     console.log('事件已注册');
@@ -363,7 +361,7 @@ const formatTime = (timestamp) => {
   return `${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
 };
 
-// 统一添加消息（自动排序并滚动）
+// 统一添加消息
 const addMessage = (message) => {
   if (messages.value.some(m => m.ID === message.ID)) return;
   messages.value.push(message);
@@ -392,26 +390,7 @@ const sendTextMessage = async () => {
   }
 };
 
-const sendImageMessage = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  console.log('准备发送图片，文件大小:', file.size);
-  const message = chat.createImageMessage({
-    to: config.value.targetUserID,
-    conversationType: TencentCloudChat.TYPES.CONV_C2C,
-    payload: { file }
-  });
-  try {
-    const res = await chat.sendMessage(message);
-    addMessage(res.data.message);
-    console.log('图片发送成功');
-  } catch (err) {
-    console.error('发送图片失败', err);
-  }
-  event.target.value = '';
-};
-
-// 收到新消息（事件回调）
+// 收到新消息
 const onMessageReceived = (event) => {
   console.log('🔥 收到新消息事件（SDK触发）', event.data);
   const newMessages = event.data;
@@ -481,7 +460,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 密码界面 */
+/* 移动端优化样式 */
 .password-container {
   display: flex;
   justify-content: center;
@@ -748,7 +727,7 @@ onUnmounted(() => {
   outline: none;
   background: #4a4e54;
 }
-.input-row button, .file-btn {
+.input-row button {
   background: #4a4e54;
   border: none;
   color: white;
@@ -759,17 +738,14 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1rem;
   transition: 0.1s;
 }
-.input-row button:active, .file-btn:active {
+.input-row button:active {
   transform: scale(0.95);
   background: #5a5e64;
 }
 .emoji-btn {
   background: #5e5ce0;
-}
-.file-btn {
-  background: #4a4e54;
 }
 </style>
