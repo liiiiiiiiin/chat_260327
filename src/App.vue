@@ -321,8 +321,14 @@ const formatTime = (timestamp) => {
 
 // 统一添加消息（自动排序并滚动）
 const addMessage = (message) => {
+  // 防止重复添加（根据消息ID去重）
+  if (messages.value.some(m => m.ID === message.ID)) {
+    console.warn('消息已存在，跳过添加', message.ID);
+    return;
+  }
   messages.value.push(message);
-  messages.value.sort((a, b) => a.time - b.time);
+  // 按时间排序，如果 time 不存在则用当前时间作为后备
+  messages.value.sort((a, b) => (a.time || 0) - (b.time || 0));
   nextTick(() => {
     if (messageListRef.value) {
       messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
@@ -366,10 +372,13 @@ const sendImageMessage = async (event) => {
 
 // 收到新消息
 const onMessageReceived = (event) => {
-  console.log('收到新消息', event.data);
+  console.log('🔥 收到新消息事件', event.data);
   const newMessages = event.data;
   if (!newMessages || newMessages.length === 0) return;
-  newMessages.forEach(msg => addMessage(msg));
+  newMessages.forEach(msg => {
+    console.log('添加消息:', msg);
+    addMessage(msg);
+  });
   reportMessageRead(newMessages);
   if (notificationPermission && document.hidden) {
     new Notification('新消息', { body: newMessages[0]?.payload?.text || '您收到一条新消息' });
@@ -433,7 +442,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 密码界面 */
+/* 样式与之前版本相同，此处省略（可保留上一版本的样式） */
 .password-container {
   display: flex;
   justify-content: center;
@@ -474,8 +483,6 @@ onUnmounted(() => {
   color: #e74c3c;
   margin-top: 1rem;
 }
-
-/* 配置界面 */
 .config-container {
   display: flex;
   justify-content: center;
@@ -540,8 +547,6 @@ onUnmounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
-/* 聊天界面 */
 .chat-container {
   height: 100vh;
   display: flex;
