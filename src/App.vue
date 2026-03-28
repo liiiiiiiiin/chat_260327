@@ -284,12 +284,10 @@ const startChat = async () => {
     messages.value = res.data.messageList.reverse(); // 按时间升序
     reportMessageRead(messages.value);
 
-    // 使用 SDK 导出的事件常量注册（关键修复）
-    const MESSAGE_RECEIVED = TencentCloudChat.EVENT.MESSAGE_RECEIVED;
-    const MESSAGE_READ_RECEIPT = TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT;
-    chat.on(MESSAGE_RECEIVED, onMessageReceived);
-    chat.on(MESSAGE_READ_RECEIPT, onMessageReadReceipt);
-    console.log('事件已注册，MESSAGE_RECEIVED 值:', MESSAGE_RECEIVED);
+    // ⭐ 使用字符串事件名，避免 EVENT 常量未定义问题
+    chat.on('MESSAGE_RECEIVED', onMessageReceived);
+    chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
+    console.log('事件已注册（字符串形式）');
 
     isLoggedIn.value = true;
     resetTimer();
