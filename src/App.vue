@@ -297,13 +297,15 @@ const startChat = async () => {
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     
-    // 注册 COS 上传插件（支持图片、视频、文件）
+    // 注册 COS 上传插件
+    console.log('正在注册 COS 插件...');
     const cos = new COS({
       getAuthorization: (options, callback) => {
         callback({ Authorization: '', SecurityToken: '' });
       }
     });
     chat.registerPlugin({ 'cos': cos });
+    console.log('COS 插件注册完成');
     
     chat.setLogLevel(0);
     await chat.login({ userID, userSig });
@@ -393,6 +395,7 @@ const sendTextMessage = async () => {
 const sendImageMessage = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
+  console.log('准备发送图片，文件大小:', file.size);
   const message = chat.createImageMessage({
     to: config.value.targetUserID,
     conversationType: TencentCloudChat.TYPES.CONV_C2C,
@@ -401,6 +404,7 @@ const sendImageMessage = async (event) => {
   try {
     const res = await chat.sendMessage(message);
     addMessage(res.data.message);
+    console.log('图片发送成功');
   } catch (err) {
     console.error('发送图片失败', err);
   }
@@ -477,7 +481,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 样式完整（与上一版本一致） */
+/* 样式与之前完全一致，此处省略（可从上一版本复制） */
 .password-container {
   display: flex;
   justify-content: center;
