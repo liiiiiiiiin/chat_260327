@@ -270,7 +270,6 @@ const startChat = async () => {
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     chat.setLogLevel(0);
     await chat.login({ userID, userSig });
-    // 等待 SDK 就绪
     await new Promise((resolve) => {
       if (chat.isReady()) resolve();
       else chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
@@ -279,14 +278,14 @@ const startChat = async () => {
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    // 消息按时间升序（旧在上，新在下）
+    // 按时间升序排序（旧消息在上，新消息在下）
     messages.value = res.data.messageList.slice().sort((a, b) => a.time - b.time);
     reportMessageRead(messages.value);
 
-    // 注册事件（使用官方常量，确保存在）
-    chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, onMessageReceived);
-    chat.on(TencentCloudChat.EVENT.MESSAGE_READ_RECEIPT, onMessageReadReceipt);
-    console.log('事件已注册');
+    // 注册事件：使用字符串事件名（最稳定）
+    chat.on('MESSAGE_RECEIVED', onMessageReceived);
+    chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
+    console.log('事件已注册：MESSAGE_RECEIVED, MESSAGE_READ_RECEIPT');
 
     isLoggedIn.value = true;
     resetTimer();
@@ -322,13 +321,13 @@ const formatTime = (timestamp) => {
 
 // 统一添加消息（自动排序并滚动）
 const addMessage = (message) => {
-  // 防止重复
+  // 防止重复添加
   if (messages.value.some(m => m.ID === message.ID)) {
     console.warn('消息已存在，跳过添加', message.ID);
     return;
   }
   messages.value.push(message);
-  // 按时间升序排序（时间戳小的在上）
+  // 按时间升序排序（旧在上，新在下）
   messages.value.sort((a, b) => a.time - b.time);
   nextTick(() => {
     if (messageListRef.value) {
@@ -440,8 +439,9 @@ onUnmounted(() => {
   if (chat) chat.logout();
 });
 </script>
+
 <style scoped>
-/* 样式与之前版本相同，此处保留完整样式（同上一版） */
+/* 样式完整复制，与上一版完全一致（确保样式正常） */
 .password-container {
   display: flex;
   justify-content: center;
