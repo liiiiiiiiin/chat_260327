@@ -481,82 +481,103 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 样式与之前完全一致，此处省略（可从上一版本复制） */
+/* 密码界面 */
 .password-container {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
   background: #2c2f33;
+  padding: 20px;
 }
 .password-box {
   background: #23272a;
   padding: 2rem;
-  border-radius: 12px;
+  border-radius: 16px;
   text-align: center;
-  width: 300px;
+  width: 100%;
+  max-width: 320px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 .password-box h2 {
   color: #e9ecef;
   margin-bottom: 1.5rem;
+  font-size: 1.5rem;
 }
 .password-box input {
   width: 100%;
-  padding: 10px;
+  padding: 14px;
   margin-bottom: 1rem;
   border: 1px solid #4a4e54;
   background: #2c2f33;
   color: #fff;
-  border-radius: 6px;
+  border-radius: 30px;
+  font-size: 1rem;
+  outline: none;
+  text-align: center;
 }
 .password-box button {
   width: 100%;
-  padding: 10px;
+  padding: 14px;
   background: #4a4e54;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 30px;
+  font-size: 1rem;
   cursor: pointer;
+  transition: 0.2s;
+}
+.password-box button:active {
+  background: #5a5e64;
+  transform: scale(0.98);
 }
 .error {
   color: #e74c3c;
   margin-top: 1rem;
+  font-size: 0.85rem;
 }
+
+/* 配置界面 */
 .config-container {
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
   background: #2c2f33;
+  padding: 20px;
+  overflow-y: auto;
 }
 .config-box {
   background: #23272a;
-  padding: 2rem;
-  border-radius: 12px;
-  text-align: center;
-  width: 400px;
+  padding: 1.5rem;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  margin: auto;
 }
 .config-field {
-  text-align: left;
-  margin-bottom: 1rem;
+  margin-bottom: 1.2rem;
 }
 .config-field label {
   display: block;
   color: #e9ecef;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   font-size: 0.9rem;
+  font-weight: 500;
 }
 .config-field input, .config-field textarea {
   width: 100%;
-  padding: 8px;
+  padding: 12px;
   background: #2c2f33;
   border: 1px solid #4a4e54;
   color: #fff;
-  border-radius: 6px;
+  border-radius: 12px;
+  font-size: 0.95rem;
   box-sizing: border-box;
 }
 .config-field textarea {
   resize: vertical;
+  min-height: 80px;
 }
 .config-field small {
   display: block;
@@ -564,59 +585,67 @@ onUnmounted(() => {
   font-size: 0.7rem;
   margin-top: 4px;
 }
-.config-field a {
-  color: #5e5ce0;
-  text-decoration: none;
-}
 .config-buttons {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  margin-top: 1rem;
+  margin-top: 1.5rem;
 }
 .config-buttons button {
-  padding: 8px 16px;
+  flex: 1;
+  padding: 12px;
   background: #4a4e54;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 30px;
+  font-size: 1rem;
   cursor: pointer;
+  transition: 0.2s;
 }
-.config-buttons button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.config-buttons button:active {
+  background: #5a5e64;
+  transform: scale(0.97);
 }
+
+/* 聊天界面 */
 .chat-container {
   height: 100vh;
   display: flex;
   flex-direction: column;
   background: #2c2f33;
+  position: relative;
 }
 .chat-header-custom {
   background: #23272a;
-  padding: 12px 16px;
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #3a3f44;
+  flex-shrink: 0;
 }
 .app-title {
   font-size: 1.2rem;
+  font-weight: 600;
   color: #e9ecef;
 }
 .chat-with {
+  font-size: 0.9rem;
   color: #b9bbbe;
 }
 .settings-btn {
   background: none;
   border: none;
   color: #b9bbbe;
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   cursor: pointer;
+  padding: 8px;
 }
-.settings-btn:hover {
+.settings-btn:active {
   color: #e9ecef;
 }
+
+/* 消息列表 */
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -624,10 +653,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 .message {
   display: flex;
-  max-width: 80%;
+  max-width: 85%;
 }
 .message.sent {
   align-self: flex-end;
@@ -639,12 +669,18 @@ onUnmounted(() => {
 .bubble {
   background: #3a3f44;
   color: #fff;
-  padding: 8px 12px;
-  border-radius: 18px;
+  padding: 10px 14px;
+  border-radius: 20px;
   position: relative;
+  word-break: break-word;
+  max-width: 100%;
 }
 .sent .bubble {
   background: #5e5ce0;
+  border-bottom-right-radius: 4px;
+}
+.received .bubble {
+  border-bottom-left-radius: 4px;
 }
 .time {
   font-size: 0.65rem;
@@ -658,11 +694,14 @@ onUnmounted(() => {
   margin-top: 2px;
   text-align: right;
 }
+
+/* 输入区 */
 .input-area {
   background: #23272a;
   border-top: 1px solid #3a3f44;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 .emoji-panel {
   padding: 8px;
@@ -670,46 +709,62 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   border-bottom: 1px solid #3a3f44;
-  max-height: 150px;
+  max-height: 120px;
   overflow-y: auto;
 }
 .emoji-panel button {
   background: #3a3f44;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
-  transition: 0.1s;
+  padding: 6px;
+  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.emoji-panel button:hover {
+.emoji-panel button:active {
   background: #5e5ce0;
 }
 .input-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 12px;
 }
 .input-row input {
   flex: 1;
   background: #3a3f44;
   border: none;
-  padding: 10px;
-  border-radius: 20px;
+  padding: 12px 16px;
+  border-radius: 30px;
   color: white;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.input-row input:focus {
+  outline: none;
+  background: #4a4e54;
 }
 .input-row button, .file-btn {
   background: #4a4e54;
   border: none;
   color: white;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 1.2rem;
+  transition: 0.1s;
+}
+.input-row button:active, .file-btn:active {
+  transform: scale(0.95);
+  background: #5a5e64;
 }
 .emoji-btn {
   background: #5e5ce0;
