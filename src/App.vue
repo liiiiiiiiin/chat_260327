@@ -35,8 +35,9 @@
       </div>
       <div class="config-field">
         <label>自己的 userSig</label>
-        <textarea v-model="config.myUserSig" rows="2" placeholder="从控制台复制，很长一串"></textarea>
+        <textarea v-model="config.myUserSigRaw" rows="2" placeholder="从控制台复制，很长一串"></textarea>
         <small><a href="https://console.cloud.tencent.com/im/tool-usersig" target="_blank">点击获取 UserSig</a>（需登录腾讯云）</small>
+        <small>注意：复制后不要带引号、换行符等额外字符</small>
       </div>
       <div class="config-buttons">
         <button @click="saveAndStart" :disabled="loadingLogin">保存并开始聊天</button>
@@ -102,21 +103,9 @@ const defaultConfig = {
   SDKAppID: 0,
   myUserID: '',
   targetUserID: '',
-  myUserSig: ''
+  myUserSigRaw: ''
 };
 
-const cleanUserSig = (raw) => {
-  if (!raw) return '';
-  let cleaned = raw.trim();
-  // 去掉首尾的引号
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
-  }
-  // 移除所有换行和回车
-  cleaned = cleaned.replace(/[\r\n]/g, '');
-  return cleaned;
-};
-  
 // 页面状态
 const showChat = ref(false);
 const showConfig = ref(false);
@@ -163,19 +152,29 @@ const insertEmoji = (emoji) => {
   nextTick(() => messageInput.value.focus());
 };
 
+// 清理 userSig：去除前后空格、首尾引号、换行符
+const cleanUserSig = (raw) => {
+  if (!raw) return '';
+  let cleaned = raw.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  cleaned = cleaned.replace(/[\r\n]/g, '');
+  return cleaned;
+};
+
 // 加载本地配置
 const loadConfig = () => {
   const saved = localStorage.getItem('fjad_chat_config');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      // 对存储的值进行 trim
       config.value = {
         ...defaultConfig,
         SDKAppID: parsed.SDKAppID,
         myUserID: (parsed.myUserID || '').trim(),
         targetUserID: (parsed.targetUserID || '').trim(),
-        myUserSig: (parsed.myUserSig || '').trim()
+        myUserSigRaw: parsed.myUserSigRaw || ''
       };
       hasSavedConfig.value = true;
       targetUserNick.value = config.value.targetUserID;
@@ -190,13 +189,11 @@ const loadConfig = () => {
 // 保存配置并开始聊天
 const saveAndStart = async () => {
   configError.value = '';
-  // 获取原始输入并清理
   let sdkAppIdStr = (config.value.SDKAppID || '').toString().trim();
   let myUserID = (config.value.myUserID || '').trim();
   let targetUserID = (config.value.targetUserID || '').trim();
   let myUserSigRaw = config.value.myUserSigRaw || '';
 
-  // 🔍 添加日志：查看原始输入长度
   console.log('原始 userSig 长度:', myUserSigRaw.length);
   console.log('原始 userSig 前50字符:', myUserSigRaw.substring(0, 50));
 
@@ -204,7 +201,6 @@ const saveAndStart = async () => {
   console.log('清理后 userSig 长度:', myUserSig.length);
   console.log('清理后 userSig 前50字符:', myUserSig.substring(0, 50));
 
-  // 校验
   if (!sdkAppIdStr) {
     configError.value = '请填写 SDKAppID';
     return;
@@ -227,21 +223,13 @@ const saveAndStart = async () => {
     return;
   }
 
-  // 保存 trim 后的值
   config.value = {
     SDKAppID: sdkAppIdNum,
     myUserID,
     targetUserID,
-    myUserSigRaw: myUserSigRaw // 保留原始输入
+    myUserSigRaw: myUserSigRaw
   };
   localStorage.setItem('fjad_chat_config', JSON.stringify(config.value));
-  
-  // 🔍 添加日志：确认保存成功
-  const saved = localStorage.getItem('fjad_chat_config');
-  console.log('保存到 localStorage 的配置:', saved);
-  const parsed = JSON.parse(saved);
-  console.log('从 localStorage 读取的 userSig 长度:', (parsed.myUserSigRaw || '').length);
-
   hasSavedConfig.value = true;
   targetUserNick.value = targetUserID;
   showConfig.value = false;
@@ -256,7 +244,7 @@ const resetConfig = () => {
   showConfig.value = true;
 };
 
-// 打开设置（从聊天界面）
+// 打开设置
 const openSettings = () => {
   if (chat) {
     chat.logout();
@@ -285,6 +273,10 @@ const startChat = async () => {
     console.log('  userSig 长度:', userSig.length);
     console.log('  targetUserID:', targetID);
 
+    if (!userSig) {
+      throw new Error('userSig 不能为空');
+    }
+
     if (chat) {
       await chat.logout();
       chat = null;
@@ -295,7 +287,6 @@ const startChat = async () => {
     await chat.login({ userID, userSig });
     console.log('✅ login 成功');
 
-    // 等待 SDK 就绪
     await new Promise((resolve) => {
       if (chat.isReady()) resolve();
       else chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
@@ -304,11 +295,9 @@ const startChat = async () => {
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    // 注意：getMessageList 返回的消息是倒序（最新在最后），我们需要正序显示
-    messages.value = res.data.messageList.reverse(); // 按时间升序
+    messages.value = res.data.messageList.reverse();
     reportMessageRead(messages.value);
 
-    // ⭐ 关键修复：使用字符串事件名（官方推荐）
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
 
@@ -357,6 +346,7 @@ const formatTime = (timestamp) => {
 
 const addMessage = (message) => {
   messages.value.push(message);
+  messages.value.sort((a, b) => a.time - b.time);
   nextTick(() => {
     if (messageListRef.value) {
       messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
@@ -397,28 +387,13 @@ const sendImageMessage = async (event) => {
   }
   event.target.value = '';
 };
+
 const onMessageReceived = (event) => {
-  console.log('🔥 收到新消息', event.data);  // 调试日志
+  console.log('🔥 收到新消息', event.data);
   const newMessages = event.data;
   if (!newMessages || newMessages.length === 0) return;
-
-  // 将新消息添加到现有列表
-  messages.value.push(...newMessages);
-
-  // 按消息时间排序（升序，时间戳小的在前）
-  messages.value.sort((a, b) => a.time - b.time);
-
-  // 滚动到底部
-  nextTick(() => {
-    if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight;
-    }
-  });
-
-  // 上报已读（收到对方消息后自动标记为已读）
+  newMessages.forEach(msg => addMessage(msg));
   reportMessageRead(newMessages);
-
-  // 浏览器通知
   if (notificationPermission && document.hidden) {
     new Notification('新消息', { body: newMessages[0]?.payload?.text || '您收到一条新消息' });
   }
@@ -456,7 +431,6 @@ const checkPassword = () => {
     if (!hasConfig) {
       showConfig.value = true;
     } else {
-      // 配置存在，直接开始聊天
       startChat();
     }
     return;
@@ -480,10 +454,8 @@ onUnmounted(() => {
 });
 </script>
 
-
-
 <style scoped>
-/* 所有样式保持不变，与上一版一致 */
+/* 密码界面 */
 .password-container {
   display: flex;
   justify-content: center;
