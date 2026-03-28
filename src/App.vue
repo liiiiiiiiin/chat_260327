@@ -152,7 +152,7 @@ const insertEmoji = (emoji) => {
   nextTick(() => messageInput.value.focus());
 };
 
-// 清理 userSig：去除前后空格、首尾引号、换行符
+// 清理 userSig
 const cleanUserSig = (raw) => {
   if (!raw) return '';
   let cleaned = raw.trim();
@@ -163,7 +163,7 @@ const cleanUserSig = (raw) => {
   return cleaned;
 };
 
-// 加载本地配置
+// 加载配置
 const loadConfig = () => {
   const saved = localStorage.getItem('fjad_chat_config');
   if (saved) {
@@ -194,12 +194,8 @@ const saveAndStart = async () => {
   let targetUserID = (config.value.targetUserID || '').trim();
   let myUserSigRaw = config.value.myUserSigRaw || '';
 
-  console.log('原始 userSig 长度:', myUserSigRaw.length);
-  console.log('原始 userSig 前50字符:', myUserSigRaw.substring(0, 50));
-
   let myUserSig = cleanUserSig(myUserSigRaw);
   console.log('清理后 userSig 长度:', myUserSig.length);
-  console.log('清理后 userSig 前50字符:', myUserSig.substring(0, 50));
 
   if (!sdkAppIdStr) {
     configError.value = '请填写 SDKAppID';
@@ -267,15 +263,8 @@ const startChat = async () => {
     const userSig = cleanUserSig(config.value.myUserSigRaw);
     const targetID = config.value.targetUserID;
 
-    console.log('🔍 准备登录，参数检查：');
-    console.log('  SDKAppID:', sdkAppId, '类型:', typeof sdkAppId);
-    console.log('  userID:', userID, '长度:', userID.length);
-    console.log('  userSig 长度:', userSig.length);
-    console.log('  targetUserID:', targetID);
-
-    if (!userSig) {
-      throw new Error('userSig 不能为空');
-    }
+    console.log('准备登录，userSig长度:', userSig.length);
+    if (!userSig) throw new Error('userSig 不能为空');
 
     if (chat) {
       await chat.logout();
@@ -283,40 +272,26 @@ const startChat = async () => {
     }
     chat = TencentCloudChat.create({ SDKAppID: sdkAppId });
     chat.setLogLevel(0);
-    console.log('🔑 正在调用 login...');
     await chat.login({ userID, userSig });
-    console.log('✅ login 成功');
-
     await new Promise((resolve) => {
       if (chat.isReady()) resolve();
       else chat.on(TencentCloudChat.EVENT.SDK_READY, resolve);
     });
-    console.log('✅ SDK ready');
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    messages.value = res.data.messageList.reverse();
+    messages.value = res.data.messageList.reverse(); // 按时间升序
     reportMessageRead(messages.value);
 
+    // 注册事件监听（字符串形式，确保生效）
     chat.on('MESSAGE_RECEIVED', onMessageReceived);
     chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
 
     isLoggedIn.value = true;
     resetTimer();
   } catch (err) {
-    console.error('❌ 登录失败，完整错误对象:', err);
-    let errorDetail = '';
-    if (err.code) {
-      errorDetail += `错误码：${err.code}`;
-    }
-    if (err.message) {
-      errorDetail += `，消息：${err.message}`;
-    } else if (err.data?.message) {
-      errorDetail += `，消息：${err.data.message}`;
-    }
-    if (!errorDetail) {
-      errorDetail = '参数验证失败，请检查 SDKAppID、userID 和 userSig 是否正确。注意：userSig 必须使用您填写的 userID 在控制台生成。';
-    }
+    console.error('登录失败', err);
+    let errorDetail = err.message || err.code || '参数验证失败，请检查 SDKAppID、userID 和 userSig';
     configError.value = `登录失败：${errorDetail}`;
     showConfig.value = true;
     if (chat) {
@@ -344,6 +319,7 @@ const formatTime = (timestamp) => {
   return `${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
 };
 
+// 统一添加消息（自动排序并滚动）
 const addMessage = (message) => {
   messages.value.push(message);
   messages.value.sort((a, b) => a.time - b.time);
@@ -388,8 +364,9 @@ const sendImageMessage = async (event) => {
   event.target.value = '';
 };
 
+// 收到新消息
 const onMessageReceived = (event) => {
-  console.log('🔥 收到新消息', event.data);
+  console.log('收到新消息', event.data);
   const newMessages = event.data;
   if (!newMessages || newMessages.length === 0) return;
   newMessages.forEach(msg => addMessage(msg));
@@ -399,6 +376,7 @@ const onMessageReceived = (event) => {
   }
 };
 
+// 已读回执
 const onMessageReadReceipt = (event) => {
   const receipts = event.data;
   receipts.forEach(receipt => {
