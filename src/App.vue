@@ -278,14 +278,21 @@ const startChat = async () => {
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    // 按时间升序排序（旧消息在上，新消息在下）
+    // 按时间升序排序（旧在上，新在下）
     messages.value = res.data.messageList.slice().sort((a, b) => a.time - b.time);
     reportMessageRead(messages.value);
 
-    // 注册事件：使用字符串事件名（最稳定）
-    chat.on('MESSAGE_RECEIVED', onMessageReceived);
-    chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
-    console.log('事件已注册：MESSAGE_RECEIVED, MESSAGE_READ_RECEIPT');
+    // 注册事件
+    const msgEvent = 'MESSAGE_RECEIVED';
+    const readEvent = 'MESSAGE_READ_RECEIPT';
+    chat.on(msgEvent, onMessageReceived);
+    chat.on(readEvent, onMessageReadReceipt);
+    console.log('✅ 事件已注册:', msgEvent, readEvent);
+
+    // 可选：打印 SDK 内部事件列表（仅调试）
+    if (chat._eventHandlers) {
+      console.log('当前事件监听数量:', Object.keys(chat._eventHandlers).length);
+    }
 
     isLoggedIn.value = true;
     resetTimer();
@@ -321,13 +328,11 @@ const formatTime = (timestamp) => {
 
 // 统一添加消息（自动排序并滚动）
 const addMessage = (message) => {
-  // 防止重复添加
   if (messages.value.some(m => m.ID === message.ID)) {
     console.warn('消息已存在，跳过添加', message.ID);
     return;
   }
   messages.value.push(message);
-  // 按时间升序排序（旧在上，新在下）
   messages.value.sort((a, b) => a.time - b.time);
   nextTick(() => {
     if (messageListRef.value) {
@@ -441,7 +446,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 样式完整复制，与上一版完全一致（确保样式正常） */
+/* 样式与之前完全一致，这里省略（可从上一版本复制） */
 .password-container {
   display: flex;
   justify-content: center;
