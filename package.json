@@ -10,7 +10,7 @@
   "dependencies": {
     "@tencentcloud/chat": "^3.5.0",
     "vue": "^3.4.0",
-    "cos-js-sdk-v5": "^1.8.0"
+    "cos-js-sdk-v5": "^1.6.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
