@@ -121,7 +121,9 @@ const messageListRef = ref(null);
 const messageInput = ref(null);
 let chat = null;
 let inactivityTimer = null;
+let pollTimer = null; // 轮询定时器
 const INACTIVE_LIMIT = 2 * 60 * 1000;
+const POLL_INTERVAL = 3000; // 3秒轮询一次
 let notificationPermission = false;
 
 const config = ref({ ...defaultConfig });
@@ -243,10 +245,39 @@ const openSettings = () => {
     chat.logout();
     chat = null;
   }
+  if (pollTimer) clearInterval(pollTimer);
   showChat.value = false;
   showConfig.value = true;
   isLoggedIn.value = false;
   if (inactivityTimer) clearTimeout(inactivityTimer);
+};
+
+// 拉取新消息（轮询用）
+const fetchNewMessages = async () => {
+  if (!chat || !isLoggedIn.value) return;
+  try {
+    const conversationID = `C2C${config.value.targetUserID}`;
+    const lastMsg = messages.value[messages.value.length - 1];
+    const lastMsgTime = lastMsg ? lastMsg.time : 0;
+    // 获取比 lastMsgTime 更新的消息
+    const res = await chat.getMessageList({ conversationID, count: 20, lastMsgTime });
+    if (res.data.messageList && res.data.messageList.length > 0) {
+      // 过滤掉已存在的消息（按ID去重）
+      const existingIds = new Set(messages.value.map(m => m.ID));
+      const newMsgs = res.data.messageList.filter(msg => !existingIds.has(msg.ID));
+      if (newMsgs.length > 0) {
+        // 按时间升序插入
+        newMsgs.forEach(msg => addMessage(msg));
+        // 上报已读
+        reportMessageRead(newMsgs);
+        if (notificationPermission && document.hidden) {
+          new Notification('新消息', { body: newMsgs[0]?.payload?.text || '您收到一条新消息' });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('轮询拉取消息失败', err);
+  }
 };
 
 // 登录 IM 并开始聊天
@@ -278,21 +309,18 @@ const startChat = async () => {
 
     const conversationID = `C2C${targetID}`;
     const res = await chat.getMessageList({ conversationID, count: 20 });
-    // 按时间升序排序（旧在上，新在下）
     messages.value = res.data.messageList.slice().sort((a, b) => a.time - b.time);
     reportMessageRead(messages.value);
 
-    // 注册事件
-    const msgEvent = 'MESSAGE_RECEIVED';
-    const readEvent = 'MESSAGE_READ_RECEIPT';
-    chat.on(msgEvent, onMessageReceived);
-    chat.on(readEvent, onMessageReadReceipt);
-    console.log('✅ 事件已注册:', msgEvent, readEvent);
+    // 注册事件（双保险，如果事件能触发更好）
+    chat.on('MESSAGE_RECEIVED', onMessageReceived);
+    chat.on('MESSAGE_READ_RECEIPT', onMessageReadReceipt);
+    console.log('事件已注册');
 
-    // 可选：打印 SDK 内部事件列表（仅调试）
-    if (chat._eventHandlers) {
-      console.log('当前事件监听数量:', Object.keys(chat._eventHandlers).length);
-    }
+    // 启动轮询
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(fetchNewMessages, POLL_INTERVAL);
+    console.log(`轮询已启动，间隔 ${POLL_INTERVAL}ms`);
 
     isLoggedIn.value = true;
     resetTimer();
@@ -316,6 +344,7 @@ const resetTimer = () => {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
     if (chat) chat.logout();
+    if (pollTimer) clearInterval(pollTimer);
     showChat.value = false;
     isLoggedIn.value = false;
   }, INACTIVE_LIMIT);
@@ -328,10 +357,7 @@ const formatTime = (timestamp) => {
 
 // 统一添加消息（自动排序并滚动）
 const addMessage = (message) => {
-  if (messages.value.some(m => m.ID === message.ID)) {
-    console.warn('消息已存在，跳过添加', message.ID);
-    return;
-  }
+  if (messages.value.some(m => m.ID === message.ID)) return;
   messages.value.push(message);
   messages.value.sort((a, b) => a.time - b.time);
   nextTick(() => {
@@ -375,14 +401,12 @@ const sendImageMessage = async (event) => {
   event.target.value = '';
 };
 
-// 收到新消息
+// 收到新消息（事件回调）
 const onMessageReceived = (event) => {
-  console.log('🔥 收到新消息事件', event.data);
+  console.log('🔥 收到新消息事件（SDK触发）', event.data);
   const newMessages = event.data;
   if (!newMessages || newMessages.length === 0) return;
-  newMessages.forEach(msg => {
-    addMessage(msg);
-  });
+  newMessages.forEach(msg => addMessage(msg));
   reportMessageRead(newMessages);
   if (notificationPermission && document.hidden) {
     new Notification('新消息', { body: newMessages[0]?.payload?.text || '您收到一条新消息' });
@@ -441,12 +465,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (inactivityTimer) clearTimeout(inactivityTimer);
+  if (pollTimer) clearInterval(pollTimer);
   if (chat) chat.logout();
 });
 </script>
 
 <style scoped>
-/* 样式与之前完全一致，这里省略（可从上一版本复制） */
+/* 样式与之前完全相同，此处省略（可从上一版本复制） */
 .password-container {
   display: flex;
   justify-content: center;
