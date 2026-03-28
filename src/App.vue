@@ -105,6 +105,18 @@ const defaultConfig = {
   myUserSig: ''
 };
 
+const cleanUserSig = (raw) => {
+  if (!raw) return '';
+  let cleaned = raw.trim();
+  // 去掉首尾的引号
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  // 移除所有换行和回车
+  cleaned = cleaned.replace(/[\r\n]/g, '');
+  return cleaned;
+};
+  
 // 页面状态
 const showChat = ref(false);
 const showConfig = ref(false);
@@ -178,11 +190,11 @@ const loadConfig = () => {
 // 保存配置并开始聊天
 const saveAndStart = async () => {
   configError.value = '';
-  // 获取并 trim 输入值
+  // 获取原始输入并清理
   let sdkAppIdStr = (config.value.SDKAppID || '').toString().trim();
   let myUserID = (config.value.myUserID || '').trim();
   let targetUserID = (config.value.targetUserID || '').trim();
-  let myUserSig = (config.value.myUserSig || '').trim();
+  let myUserSigRaw = config.value.myUserSigRaw || '';
 
   // 🔍 添加日志：查看原始输入长度
   console.log('原始 userSig 长度:', myUserSigRaw.length);
@@ -191,7 +203,7 @@ const saveAndStart = async () => {
   let myUserSig = cleanUserSig(myUserSigRaw);
   console.log('清理后 userSig 长度:', myUserSig.length);
   console.log('清理后 userSig 前50字符:', myUserSig.substring(0, 50));
-  
+
   // 校验
   if (!sdkAppIdStr) {
     configError.value = '请填写 SDKAppID';
@@ -215,25 +227,21 @@ const saveAndStart = async () => {
     return;
   }
 
-  // 检查 userID 格式
-  const userIdPattern = /^[a-zA-Z0-9_]+$/;
-  if (!userIdPattern.test(myUserID)) {
-    configError.value = 'userID 只能包含字母、数字和下划线';
-    return;
-  }
-  if (!userIdPattern.test(targetUserID)) {
-    configError.value = '对方 userID 只能包含字母、数字和下划线';
-    return;
-  }
-
   // 保存 trim 后的值
   config.value = {
     SDKAppID: sdkAppIdNum,
     myUserID,
     targetUserID,
-    myUserSig
+    myUserSigRaw: myUserSigRaw // 保留原始输入
   };
   localStorage.setItem('fjad_chat_config', JSON.stringify(config.value));
+  
+  // 🔍 添加日志：确认保存成功
+  const saved = localStorage.getItem('fjad_chat_config');
+  console.log('保存到 localStorage 的配置:', saved);
+  const parsed = JSON.parse(saved);
+  console.log('从 localStorage 读取的 userSig 长度:', (parsed.myUserSigRaw || '').length);
+
   hasSavedConfig.value = true;
   targetUserNick.value = targetUserID;
   showConfig.value = false;
